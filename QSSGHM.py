@@ -258,9 +258,115 @@ Q_lwr_co = np.zeros((365, 24))
 T_co = np.zeros((365, 24))
 T_sky = np.zeros((365, 24))
 
+import numpy as np
 
+for i in range(365):
+    for j in range(24):
         
+        # Solar Radiation
+        # ---------------
+        Q_s[i,j] = (I_T_e1[i,j]*N_s*A_e1*Trans_GL + I_T_e2[i,j]*A_e2*Trans_co + I_T_w1[i,j]*N_s*A_w1*Trans_GL +
+                    I_T_w2[i,j]*A_w2*Trans_co + I_T_n[i,j]*N_s*A_n*Trans_co + I_T_s[i,j]*N_s*A_s*Trans_co)*3600 # J
         
+        # Supplementary Lighting
+        # ----------------------
+        DLI_sun[i,j] = 2.15E-6*Q_s[i,j]/A_gh # DLI provided by sun [mol/m2day]
+        
+        if loc_start_sl[i] <= hr_num[i,j] <= loc_end_sl[i]:
+            if DLI_sun[i,j] < DLI_hour:
+                DLI_light[i,j] = DLI_hour - DLI_sun[i,j] # DLI provided by supplementary lighting [mol/m2day]
+                W_dot_sl[i,j] = DLI_light[i,j]*(10**6)*F_a/(F_lc*3600) # power consumed by supplementary lighting [W/m2]
+                Q_sl[i,j] = W_dot_sl[i,j]*3600*F_hc*A_gh # J
+            
+        # Heat Loss by Longwave Radiation
+        # -------------------------------
+        T_sky[i,j] = 0.055*(T_amb[i,j]+273.15)**1.5-273.15
+        if I_G[i,j] > 0:
+            T_co[i,j] = T_gh_d/3 + 2*T_amb[i,j]/3
+            Q_lwr_sky[i,j] = sigma*Emis_p*Fp_sky*A_gh*Transl_GL*((T_gh_d+273.15)**4-(T_sky[i,j]+273.15)**4) # between plants and sky
+            Q_lwr_co[i,j] = sigma*((T_gh_d+273.15)**4-(T_co[i,j]+273.15)**4)*(Emis_GL*N_s*A_e1*((1+np.cos(np.deg2rad(beta)))/2) +
+                                Emis_co*A_e2*((1+np.cos(np.deg2rad(90)))/2) + Emis_GL*N_s*A_w1*((1+np.cos(np.deg2rad(beta)))/2) +
+                                Emis_co*A_w2*((1+np.cos(np.deg2rad(90)))/2) + Emis_co*N_s*A_n*((1+np.cos(np.deg2rad(90)))/2) +
+                                Emis_co*N_s*A_s*((1+np.cos(np.deg2rad(90)))/2))
+        else:
+            T_co[i,j] = T_gh_n/3 + 2*T_amb[i,j]/3
+            Q_lwr_sky[i,j] = 0
+            Q_lwr_co[i,j] = sigma*((T_gh_n+273.15)**4 - (T_co[i,j]+273.15)**4)*(Emis_GL*N_s*A_e1*((1+math.cosd(beta))/2) + \
+                            Emis_co*A_e2*((1+math.cosd(90))/2) + Emis_GL*N_s*A_w1*((1+math.cosd(beta))/2) + \
+                            Emis_co*A_w2*((1+math.cos(90))/2) + Emis_co*N_s*A_n*((1+math.cosd(90))/2) + \
+                            Emis_co*N_s*A_s*((1+math.cosd(90))/2))
+            
+        Q_lwr[i,j] = (Q_lwr_sky[i,j] + Q_lwr_co[i,j])*3600 # J
+
+                            
+        ## Conductive and Convective Heat Loss
+        # -----------------------------------
+        # "Free Convection (Inside)"
+        if I_G[i,j]==0:
+            T_film_in[i,j]=(T_co[i,j]+T_gh_n)/2
+            dt_gh[i,j]=abs(T_gh_n-T_co[i,j])
+        else:
+            T_film_in[i,j]=(T_co[i,j]+T_gh_d)/2
+            dt_gh[i,j]=abs(T_gh_d-T_co[i,j])
+        
+        VE[i,j]=0.00366041593-0.0000134150047*T_film_in[i,j]+5.08683431E-08*T_film_in[i,j]**2-1.75298514E-10*T_film_in[i,j]**3 #VE_air=0.00366041593-0.0000134150047*T+5.08683431E-08*T^2-1.75298514E-10*T^3 [1/K]
+        k_a_gh[i,j]=0.023635147+0.0000756348155*T_film_in[i,j]-2.52191313E-08*T_film_in[i,j]**2 #k_air=0.023635147+0.0000756348155*T-2.52191313E-08*T^2 [W/mK]  
+        mu_a_gh[i,j]=0.0000172934955+4.89570039E-08*T_film_in[i,j]-4.28241627E-11*T_film_in[i,j]**2 #mu_air=0.0000172934955+4.89570039E-08*T-4.28241627E-11*T^2 [kg/ms]
+        Cp_a_gh[i,j]=(1.05-0.365*((T_film_in[i,j]+273.15)/1000)+0.85*((T_film_in[i,j]+273.15)/1000)**2-0.39*((T_film_in[i,j]+273.15)/1000)**3)*1000 #Cp_air=1000*(1.05-0.365*Theta+0.85*Theta^2-0.39*Theta^3) [J/kgK]--Theta=(T (in Kelvin)/1000)
+        rho_a_gh[i,j]=P_amb[i,j]/((8.314/28.97)*(T_film_in[i,j]+273.15)) #density [kg/m3]
+
+        Gr_e1[i,j]=9.81*VE[i,j]*L_eff_nc_e1**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2) #Grashof number
+        Gr_e2[i,j]=9.81*VE[i,j]*L_eff_nc_e2**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2)
+        Gr_w1[i,j]=9.81*VE[i,j]*L_eff_nc_w1**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2)
+        Gr_w2[i,j]=9.81*VE[i,j]*L_eff_nc_w2**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2)
+        Gr_n[i,j]=9.81*VE[i,j]*L_eff_nc_n**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2)
+        Gr_s[i,j]=9.81*VE[i,j]*L_eff_nc_s**3*dt_gh[i,j]/((mu_a_gh[i,j]/rho_a_gh[i,j])**2)
+
+        h_i_e1[i,j]=(k_a_gh[i,j]/L_eff_nc_e1)*0.1*(Gr_e1[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33 #heat transfer coefficient [W/m2k]
+        h_i_e2[i,j]=(k_a_gh[i,j]/L_eff_nc_e2)*0.1*(Gr_e2[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33
+        h_i_w1[i,j]=(k_a_gh[i,j]/L_eff_nc_w1)*0.1*(Gr_w1[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33
+        h_i_w2[i,j]=(k_a_gh[i,j]/L_eff_nc_w2)*0.1*(Gr_w2[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33
+        h_i_n[i,j]=(k_a_gh[i,j]/L_eff_nc_n)*0.1*(Gr_n[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33
+        h_i_s[i,j]=(k_a_gh[i,j]/L_eff_nc_s)*0.1*(Gr_s[i,j]*mu_a_gh[i,j]*Cp_a_gh[i,j]/k_a_gh[i,j])**0.33
+
+        # Forced Convection (Outside)
+        if w_dir[i,j]<=22.5 and w_dir[i,j]>=337.5 and w_dir[i,j]<=202.5 and w_dir[i,j]>=157.5:
+            L_eff_fc_e1=L
+            L_eff_fc_e2=L
+            L_eff_fc_w1=L
+            L_eff_fc_w2=L
+            L_eff_fc_n=A_n/(2*H+2*W_tr+W)
+            L_eff_fc_s=A_s/(2*H+2*W_tr+W)
+        elif w_dir[i,j]<=112.5 and w_dir[i,j]>=67.5 and w_dir[i,j]<=292.5 and w_dir[i,j]>=247.5:
+            L_eff_fc_e1=A_e1/(2*(L+W_tr))
+            L_eff_fc_e2=A_e2/(2*(L+H))
+            L_eff_fc_w1=A_w1/(2*(L+W_tr))
+            L_eff_fc_w2=A_w2/(2*(L+H))
+            L_eff_fc_n=W
+            L_eff_fc_s=W
+        else:
+            L_eff_fc_e1=A_e1/(2*(L+W_tr))
+            L_eff_fc_e2=A_e2/(2*(L+H))
+            L_eff_fc_w1=A_w1/(2*(L+W_tr))
+            L_eff_fc_w2=A_w2/(2*(L+H))
+            L_eff_fc_n=A_n/(2*H+2*W_tr+W)
+            L_eff_fc_s=A_s/(2*H+2*W_tr+W)
+        
+        T_film_out[i,j] = (T_co[i,j] + T_amb[i,j]) / 2
+        k_amb[i,j] = 0.023635147 + 0.0000756348155 * T_film_out[i,j] - 2.52191313E-08 * T_film_out[i,j]**2
+        mu_amb[i,j] = 0.0000172934955 + 4.89570039E-08 * T_film_out[i,j] - 4.28241627E-11 * T_film_out[i,j]**2
+        Cp_amb[i,j] = (1.05 - 0.365 * ((T_film_out[i,j] + 273.15) / 1000) + 0.85 * ((T_film_out[i,j] + 273.15) / 1000)**2 - 0.39 * ((T_film_out[i,j] + 273.15) / 1000)**3) * 1000
+        rho_amb[i,j] = P_amb[i,j] / ((8.314 / 28.97) * (T_film_out[i,j] + 273.15))
+
+        h_o_e1[i,j] = (k_amb[i,j] / L_eff_fc_e1) * 0.037 * ((rho_amb[i,j] * v_amb[i,j] * L_eff_fc_e1 / mu_amb[i,j]) ** 0.8) * (mu_amb[i,j] * Cp_amb[i,j] / k_amb[i,j]) ** 0.33 # heat transfer coefficient [W/m2k]
+        h_o_e2[i,j] = (k_amb[i,j] / L_eff_fc_e2) * 0.037 * ((rho_amb[i,j] * v_amb[i,j] * L_eff_fc_e2 / mu_amb[i,j]) ** 0.8) * (mu_amb[i,j] * Cp_amb[i,j] / k_amb[i,j]) ** 0.33
+        h_o_w1[i,j] = (k_amb[i,j] / L_eff_fc_w1) * 0.037 * ((rho_amb[i,j] * v_amb[i,j] * L_eff_fc_w1 / mu_amb[i,j]) ** 0.8) * (mu_amb[i,j] * Cp_amb[i,j] / k_amb[i,j]) ** 0.33
+        h_o_w2[i,j] = (k_amb[i,j] / L_eff_fc_w2) * 0.037 * ((rho_amb[i,j] * v_amb[i,j] * L_eff_fc_w2 / mu_amb[i,j]) ** 0.8) * (mu_amb[i,j] * Cp_amb[i,j] / k_amb[i,j]) ** 0.33
+        h_o_n[i,j] = (k_amb[i,j] / L_eff_fc_n) * 0.037 * ((rho_amb[i,j] * v_amb[i,j] * L_eff_fc_n / mu_amb[i,j]) ** 0.8) * (mu_amb[i,j] * Cp_amb[i,j] / k_amb[i,j]) ** 0.33
+        h_o_s[i,j] = (k_amb[i,j] / L_eff_fc_s) * 0.037 * ((rho_amb[i,j]))
+
+        # continue at line 379
+
 
 
 
