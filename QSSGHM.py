@@ -367,7 +367,99 @@ for i in range(365):
 
         # continue at line 379
 
+        U_e1[i,j]=(1/h_i_e1[i,j]+N_GL*d_GL/k_GL+1/h_o_e1[i,j])**(-1) #overall heat transfer coefficient [W/m2k]
+        U_e2[i,j]=(1/h_i_e2[i,j]+N_GL*d_GL/k_GL+N_PC*d_PC/k_PC+N_PC/h_a+1/h_o_e2[i,j])**(-1)
+        U_w1[i,j]=(1/h_i_w1[i,j]+N_GL*d_GL/k_GL+1/h_o_w1[i,j])**(-1)
+        U_w2[i,j]=(1/h_i_w2[i,j]+N_GL*d_GL/k_GL+N_PC*d_PC/k_PC+N_PC/h_a+1/h_o_w2[i,j]+(I_G[i,j]==0)/h_a)**(-1)
+        U_n[i,j]=(1/h_i_n[i,j]+N_GL*d_GL/k_GL+N_PC*d_PC/k_PC+N_PC/h_a+1/h_o_n[i,j])**(-1)
+        U_s[i,j]=(1/h_i_s[i,j]+N_GL*d_GL/k_GL+N_PC*d_PC/k_PC+N_PC/h_a+1/h_o_s[i,j])**(-1)
 
+        if I_G[i,j]==0:
+            Q_cc_e1[i,j]=U_e1[i,j]*N_s*A_e1*(T_gh_n-T_amb[i,j])*3600 #J
+            Q_cc_e2[i,j]=U_e2[i,j]*A_e2*(T_gh_n-T_amb[i,j])*3600
+            Q_cc_w1[i,j]=U_w1[i,j]*N_s*A_w1*(T_gh_n-T_amb[i,j])*3600
+            Q_cc_w2[i,j]=U_w2[i,j]*A_w2*(T_gh_n-T_amb[i,j])*3600
+            Q_cc_n[i,j]=U_n[i,j]*N_s*A_n*(T_gh_n-T_amb[i,j])*3600
+            Q_cc_s[i,j]=U_s[i,j]*N_s*A_s*(T_gh_n-T_amb[i,j])*3600
+        else:
+            Q_cc_e1[i,j]=U_e1(i,j)*N_s*A_e1*(T_gh_d-T_amb(i,j))*3600 #J
+            Q_cc_e2[i,j]=U_e2(i,j)*A_e2*(T_gh_d-T_amb(i,j))*3600
+            Q_cc_w1[i,j]=U_w1(i,j)*N_s*A_w1*(T_gh_d-T_amb(i,j))*3600
+            Q_cc_w2[i,j]=U_w2(i,j)*A_w2*(T_gh_d-T_amb(i,j))*3600
+            Q_cc_n[i,j]=U_n(i,j)*N_s*A_n*(T_gh_d-T_amb(i,j))*3600
+            Q_cc_s[i,j]=U_s(i,j)*N_s*A_s*(T_gh_d-T_amb(i,j))*3600
 
+        Q_cc=Q_cc_e1+Q_cc_e2+Q_cc_w1+Q_cc_w2+Q_cc_n+Q_cc_s
 
+        ## Heat Loss by Air Exchange
+
+        if I_G[i,j]==0:
+            Q_airex[i,j]=0.33*N_a*V_gh*(T_gh_n-T_amb[i,j])*3600
+        else:
+            Q_airex[i,j]=0.33*N_a*V_gh*(T_gh_d-T_amb[i,j])*3600
+
+        ## Heat Loss through the Floor
+
+        if i<=31 and i>=1:
+            T_s=8.9 #deep soil temperature [C]
+        elif i<=59 and i>=32:
+            T_s=8.3
+        elif i<=90 and i>=60:
+            T_s=7.2
+        elif i<=120 and i>=91:
+            T_s=6.7
+        elif i<=151 and i>=121:
+            T_s=6.1
+        elif i<=181 and i>=152:
+            T_s=6.7
+        elif i<=212 and i>=182:
+            T_s=7.8
+        elif i<=243 and i>=213:
+            T_s=9.4
+        elif i<=273 and i>=244:
+            T_s=10.5
+        elif i<=304 and i>=274:
+            T_s=11.1
+        elif i<=334 and i>=305:
+            T_s=11.1
+        else:
+            T_s=10
+        
+
+        if I_G[i,j]==0:
+            Q_f[i,j]=(k_s/H_s)*A_gh*(T_gh_n-T_s)*3600 #J  
+        else:
+            Q_f[i,j]=(k_s/H_s)*A_gh*(T_gh_d-T_s)*3600
+
+        # Heat Loss by Evapotranspiration
+        # -------------------------------
+        if I_G[i,j]>0:
+            P_g[i,j]=0.618543911+0.0443631857*T_gh_d+0.00139030107*T_gh_d**2+0.0000266080784*T_gh_d**3+3.35139063E-07*T_gh_d**4+2.01114464E-09*T_gh_d**5 #P_sat=0.618543911+0.0443631857*T+0.00139030107*T^2+0.0000266080784*T^3+3.35139063E-07*T^4+2.01114464E-09*T^5 [kPa] 
+        else:
+            P_g[i,j]=0
+
+        omega_ps[i,j]=0.622*P_g[i,j]/(P_amb[i,j]-P_g[i,j])
+        omega_gh[i,j]=0.622*phi_gh*P_g[i,j]/(P_amb[i,j]-phi_gh*P_g[i,j])
+        R_s[i,j]=200*(1+1/exp(0.05*(I_G[i,j]*Trans_GL-50)))
+        rho_a_gh[i,j]=P_amb[i,j]/((8.314/28.97)*(T_amb[i,j]+273.15))
+        m_dot_moist[i,j]=A_p*rho_a_gh(i,j)*(omega_ps(i,j)-omega_gh(i,j))/(R_a+R_s(i,j))
+        Q_evap[i,j]=m_dot_moist(i,j)*h_v*1000*3600 #J
+
+        ## Hourly Heating Demand
+        Q_hour[i,j] = (Q_s[i,j] + Q_sl[i,j] - Q_cc[i,j] - Q_airex[i,j] - Q_f[i,j] - Q_evap[i,j] - Q_lwr[i,j]) / (10**6) #MJ
+    
+    ## Exporting the Results
+
+    for i in range(365):
+        Q_heating_day[i] = sum(Q_hour[i,:] * (Q_hour[i,:] < 0))
+        Q_cooling_day[i] = sum(Q_hour[i,:] * (Q_hour[i,:] > 0))
+
+N_miner = 1
+Q_miner = 3240 #W
+Q_tot_miner = N_miner * Q_miner * 24 * 3600 / (10**6) #MJ
+Q_coldest_day = abs(min(Q_heating_day))
+Err = Q_tot_miner / 1.05 - Q_coldest_day
+
+Q_heating_year = -sum(Q_heating_day) #MJ
+Q_cooling_year = sum(Q_cooling_day) #MJ
 
