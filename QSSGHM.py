@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import math
+import sympy as sp
 
 # Meteorological Data from NSRDB
 # The required data for solar radiation are imported from SAM
@@ -155,8 +156,14 @@ loc_end_sl = np.zeros((365, 1))
 
 
 for i in range(365):
-    sun_rs[i] = sf[i][0] # sunrise hour
-    sun_st[i] = np.max(sf[i]) # sunset hour
+    if i >= 12: # we need to append to the list we made
+        sun_rs = np.append(sun_rs, sf[i][0]) # sunrise hour
+        sun_st = np.append(sun_st, np.max(sf[i])) # sunset hour
+    else:
+        sun_rs[i] = sf[i][0] # sunrise hour
+        sun_st[i] = np.max(sf[i]) # sunset hour
+
+
     n_day[i, 0] = np.count_nonzero(sf[i]) # number of daylight hours for each day
     n_exc_light[i] = np.abs(n_day[i][0] - n_light) / 2 # number of excess hours for supplementary lighting
     loc_start_sl[i] = sun_rs[i] - n_exc_light[i] # start point of supplementary lighting
@@ -296,10 +303,10 @@ for i in range(365):
         else:
             T_co[i][j] = T_gh_n/3 + 2*T_amb[i][j]/3
             Q_lwr_sky[i][j] = 0
-            Q_lwr_co[i][j] = sigma*((T_gh_n+273.15)**4 - (T_co[i][j]+273.15)**4)*(Emis_GL*N_s*A_e1*((1+math.cosd(beta))/2) + \
-                            Emis_co*A_e2*((1+math.cosd(90))/2) + Emis_GL*N_s*A_w1*((1+math.cosd(beta))/2) + \
-                            Emis_co*A_w2*((1+math.cos(90))/2) + Emis_co*N_s*A_n*((1+math.cosd(90))/2) + \
-                            Emis_co*N_s*A_s*((1+math.cosd(90))/2))
+            Q_lwr_co[i][j] = sigma*((T_gh_n+273.15)**4 - (T_co[i][j]+273.15)**4)*(Emis_GL*N_s*A_e1*((1+math.cos(beta * math.pi /180))/2) + \
+                            Emis_co*A_e2*((1+math.cos(90 * math.pi /180))/2) + Emis_GL*N_s*A_w1*((1+math.cos(beta * math.pi /180))/2) + \
+                            Emis_co*A_w2*((1+math.cos(90 * math.pi /180))/2) + Emis_co*N_s*A_n*((1+math.cos(90 * math.pi /180))/2) + \
+                            Emis_co*N_s*A_s*((1+math.cos(90 * math.pi /180))/2))
             
         Q_lwr[i][j] = (Q_lwr_sky[i][j] + Q_lwr_co[i][j])*3600 # J
 
@@ -369,8 +376,6 @@ for i in range(365):
         h_o_w2[i][j] = (k_amb[i][j] / L_eff_fc_w2) * 0.037 * ((rho_amb[i][j] * v_amb[i][j] * L_eff_fc_w2 / mu_amb[i][j]) ** 0.8) * (mu_amb[i][j] * Cp_amb[i][j] / k_amb[i][j]) ** 0.33
         h_o_n[i][j] = (k_amb[i][j] / L_eff_fc_n) * 0.037 * ((rho_amb[i][j] * v_amb[i][j] * L_eff_fc_n / mu_amb[i][j]) ** 0.8) * (mu_amb[i][j] * Cp_amb[i][j] / k_amb[i][j]) ** 0.33
         h_o_s[i][j] = (k_amb[i][j] / L_eff_fc_s) * 0.037 * ((rho_amb[i][j]))
-
-        # continue at line 379
 
         U_e1[i][j]=(1/h_i_e1[i][j]+N_GL*d_GL/k_GL+1/h_o_e1[i][j])**(-1) #overall heat transfer coefficient [W/m2k]
         U_e2[i][j]=(1/h_i_e2[i][j]+N_GL*d_GL/k_GL+N_PC*d_PC/k_PC+N_PC/h_a+1/h_o_e2[i][j])**(-1)
