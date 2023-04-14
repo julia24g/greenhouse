@@ -460,9 +460,14 @@ for i in range(365):
     
     ## Exporting the Results
 
+    print("Printing heating and cooling daily demands: ")
+
     for i in range(365):
+        print("Day ", i + 1)
         Q_heating_day[i] = sum(Q_hour[i] * (Q_hour[i] < 0))
         Q_cooling_day[i] = sum(Q_hour[i] * (Q_hour[i] > 0))
+        print("Heating:", Q_heating_day[i][0])
+        print("Cooling:", Q_cooling_day[i][0])
 
 N_miner = 1
 Q_miner = 3240 #W
@@ -470,6 +475,10 @@ Q_tot_miner = N_miner * Q_miner * 24 * 3600 / (10**6) #MJ
 Q_coldest_day = abs(min(Q_heating_day))
 Err = Q_tot_miner / 1.05 - Q_coldest_day
 
+print()
 Q_heating_year = -sum(Q_heating_day) #MJ
 Q_cooling_year = sum(Q_cooling_day) #MJ
+
+print("Yearly heating demand: ", Q_heating_year[0])
+print("Yearly cooling demand: ", Q_cooling_year[0])
 
